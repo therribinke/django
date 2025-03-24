@@ -17,7 +17,8 @@ def stock_detail(request, pk):
     stock = get_object_or_404(Stock, pk=pk)
     context = {
         'stock': stock,
-        'form': BuySellForm(initial={'price': stock.get_random_price()})
+        'buy_form': BuySellForm(initial={'price': stock.get_random_price()}),
+	'sell_form': BuySellForm(initial={'price': stock.get_random_price()})
     }
     return render(request, 'stock.html', context)
 
@@ -62,7 +63,6 @@ def stock_buy(request, pk):
 
     return render(request, 'stock.html', context)
 
-
 @login_required
 def account(request):
     currencies = cache.get(f'currencies_{request.user.username}')
@@ -76,7 +76,6 @@ def account(request):
                 'sign': acc_currency.currency.sign
             } for acc_currency in request.user.account.accountcurrency_set.select_related('currency')
         ]
-        cache.set(f'currencies_{request.user.username}', currencies, 300)
 
     if stocks is None:
         stocks = [
@@ -86,7 +85,6 @@ def account(request):
                 'avg': acc_stock.average_buy_cost
             } for acc_stock in request.user.account.accountstock_set.select_related('stock').all()
         ]
-        cache.set(f'stocks_{request.user.username}', stocks, 300)
 
     context = {
         'currencies': currencies,
@@ -94,3 +92,45 @@ def account(request):
     }
 
     return render(request, template_name='account.html', context=context)
+
+def stock_sell(request, pk):
+    if request.method != "POST":
+        return redirect('stock:detail', pk=pk)
+
+    stock = get_object_or_404(Stock, pk=pk)
+    form = BuySellForm(request.POST)
+
+    if form.is_valid():
+        amount = form.cleaned_data['amount']
+        price = form.cleaned_data['price']
+        sell_cost = price * amount
+
+        acc_stock = AccountStock.objects.filter(
+            account=request.user.account,
+            stock=stock
+        ).first()
+
+        if not acc_stock or acc_stock.amount < amount:
+            form.add_error('amount', f'Недостаточно акций. Доступно: {acc_stock.amount if acc_stock else 0}')
+        else:
+            acc_stock.amount -= amount
+            if acc_stock.amount == 0:
+                acc_stock.delete()
+            else:
+                acc_stock.save()
+
+            acc_currency, created = AccountCurrency.objects.get_or_create(
+                account=request.user.account,
+                currency=stock.currency,
+                defaults={'amount': 0}
+            )
+            acc_currency.amount += sell_cost
+            acc_currency.save()
+            return redirect('stock:list')
+
+    context = {
+        'stock': stock,
+        'buy_form': BuySellForm(initial={'price': stock.get_random_price()}),
+        'sell_form': form
+    }
+    return render(request, 'stock.html', context)
