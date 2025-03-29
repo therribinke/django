@@ -14,9 +14,13 @@
           <div class="row row-cols-1">
             <div class="col">
               {% if user.is_authenticated %}
-		<span>Добро пожаловать, {{ user.username }}</span> | 
-                <a href="{% url 'stock:account' %}">Личный кабинет</a> | 
-                <a href="{% url 'logout' %}">Выход</a>
+		<form method="post" action="{% url 'logout' %}">
+  		 {% csrf_token %}
+   		 <span>Добро пожаловать, {{ user.username }}</span> |
+  		 <a href="{% url 'stock:account' %}">Личный кабинет</a> |
+  		 <button type="submit">Выход</button>
+		</form>
+
               {% else %}
                 <a href="{% url 'login' %}">Вход</a>
               {% endif %}
